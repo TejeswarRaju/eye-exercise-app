@@ -1,14 +1,217 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Hello World</title>
-  <link href='/style.css' rel='stylesheet'>
+    <title>Eye Exercise Reminder</title>
+    <style>
+        body { 
+            font-family: Arial; 
+            text-align: center; 
+            margin-top: 30px; 
+            transition: background-color 2s ease; 
+            background-color: #ffffff;
+        }
+        button { padding: 10px 20px; margin: 10px; font-size: 16px; cursor: pointer; }
+        #exercise { margin-top: 20px; font-size: 18px; color: green; }
+        #countdown { font-size: 24px; font-weight: bold; margin-top: 10px; }
+
+        /* Circular Timer */
+        .progress-circle {
+            position: relative;
+            width: 120px;
+            height: 120px;
+            margin: 20px auto;
+        }
+        .progress-circle svg { transform: rotate(-90deg); }
+        .progress-circle circle {
+            fill: none;
+            stroke-width: 10;
+            stroke-linecap: round;
+        }
+        .progress-bg { stroke: #ddd; }
+        .progress-bar { stroke: #3498db; stroke-dasharray: 377; stroke-dashoffset: 377; transition: stroke-dashoffset 1s linear; }
+        .progress-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        /* Eye animation */
+        #eyeAnimation {
+            margin: 20px auto;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: #fff;
+            border: 3px solid #000;
+            position: relative;
+            overflow: hidden;
+        }
+        #eyeAnimation .pupil {
+            width: 20px;
+            height: 20px;
+            background: #000;
+            border-radius: 50%;
+            position: absolute;
+            top: 20px;
+            left: 20px;
+        }
+
+        /* Animations */
+        @keyframes blinkAnim { 0%,100% { transform: scaleY(1); } 50% { transform: scaleY(0.1); } }
+        @keyframes pulseAnim { 0%,100% { transform: scale(1); } 50% { transform: scale(1.2); } }
+        @keyframes focusAnim { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+        @keyframes lookLeftRight { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-8px); } 75% { transform: translateX(8px); } }
+
+        .eye-blink .pupil { animation: blinkAnim 1s ease-in-out infinite; }
+        .eye-pulse .pupil { animation: pulseAnim 1s ease-in-out infinite; }
+        .eye-focus .pupil { animation: focusAnim 1s ease-in-out infinite; }
+        .eye-rotate .pupil { animation: lookLeftRight 1s ease-in-out infinite; }
+
+        /* Calming background for break */
+        .break-mode { background-color: #d6f5ff; }
+    </style>
 </head>
 <body>
-  <h1>Hello, world!</h1>
-  <button onclick="console.log('hello');">Press me</button>
-  <script defer type="text/javascript" src="/main.js"></script>
+    <h1>Eye Exercise Reminder</h1>
+    <p>Set your reminder interval (minutes):</p>
+    <input type="number" id="intervalInput" value="20" min="1" style="width: 60px; font-size:16px;"> 
+    <br>
+    <button id="startBtn">Start</button>
+    <button id="stopBtn">Stop</button>
+
+    <div class="progress-circle">
+        <svg width="120" height="120">
+            <circle class="progress-bg" cx="60" cy="60" r="60"></circle>
+            <circle class="progress-bar" cx="60" cy="60" r="60"></circle>
+        </svg>
+        <div class="progress-text" id="workCountdownText">--:--</div>
+    </div>
+
+    <div id="exercise"></div>
+    <div id="countdown"></div>
+    <div id="eyeAnimation"><div class="pupil"></div></div>
+    <p>Breaks taken today: <span id="breakCount">0</span></p>
+
+    <audio id="chime" src="https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg"></audio>
+
+    <script>
+        let workTimer, countdownTimer, workCountdownTimer;
+        let intervalMinutes = 20;
+        let breakCount = 0;
+        let running = false;
+        const circumference = 2 * Math.PI * 60;
+
+        const todayKey = new Date().toLocaleDateString();
+        if (localStorage.getItem("breakDate") !== todayKey) {
+            localStorage.setItem("breakDate", todayKey);
+            localStorage.setItem("breakCount", 0);
+        }
+        breakCount = parseInt(localStorage.getItem("breakCount")) || 0;
+        document.getElementById("breakCount").textContent = breakCount;
+
+        Notification.requestPermission();
+
+        const exercises = [
+            { text: "Blink slowly for 10 seconds.", animClass: "eye-blink" },
+            { text: "Move your eyes left and right.", animClass: "eye-rotate" },
+            { text: "Close your eyes gently for 20 seconds.", animClass: "eye-pulse" },
+            { text: "Focus far and near alternately.", animClass: "eye-focus" }
+        ];
+
+        function startWorkCountdown(minutes) {
+            clearInterval(workCountdownTimer);
+            let totalSeconds = minutes * 60;
+            updateWorkCountdownDisplay(totalSeconds, minutes * 60);
+            workCountdownTimer = setInterval(() => {
+                totalSeconds--;
+                if (totalSeconds >= 0) updateWorkCountdownDisplay(totalSeconds, minutes * 60);
+                else clearInterval(workCountdownTimer);
+            }, 1000);
+        }
+
+        function updateWorkCountdownDisplay(seconds, total) {
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            document.getElementById("workCountdownText").textContent = 
+                `${mins}:${secs.toString().padStart(2, '0')}`;
+            const progress = seconds / total;
+            document.querySelector(".progress-bar").style.strokeDashoffset = circumference * progress;
+        }
+
+        function startWorkTimer() {
+            clearTimeout(workTimer);
+            intervalMinutes = parseInt(document.getElementById('intervalInput').value) || 20;
+            startWorkCountdown(intervalMinutes);
+            workTimer = setTimeout(sendReminder, intervalMinutes * 60 * 1000);
+        }
+
+        function sendReminder() {
+            clearInterval(workCountdownTimer);
+
+            const exercise = exercises[Math.floor(Math.random() * exercises.length)];
+            const msg = exercise.text;
+
+            document.getElementById("chime").play();
+            if (Notification.permission === "granted") new Notification("Time to rest your eyes!", { body: msg });
+
+            document.getElementById('exercise').textContent = msg;
+
+            const eyeDiv = document.getElementById('eyeAnimation');
+            const pupil = eyeDiv.querySelector('.pupil');
+            pupil.className = 'pupil'; // reset
+            void pupil.offsetWidth; // reflow
+            eyeDiv.className = '';
+            eyeDiv.classList.add(exercise.animClass);
+
+            breakCount++;
+            localStorage.setItem("breakCount", breakCount);
+            document.getElementById("breakCount").textContent = breakCount;
+
+            document.body.classList.add("break-mode");
+
+            let seconds = 20;
+            document.getElementById("countdown").textContent = `⏳ ${seconds} seconds remaining`;
+            clearInterval(countdownTimer);
+            countdownTimer = setInterval(() => {
+                seconds--;
+                if (seconds > 0) document.getElementById("countdown").textContent = `⏳ ${seconds} seconds remaining`;
+                else {
+                    document.getElementById("countdown").textContent = "✅ Done! Back to work.";
+                    clearInterval(countdownTimer);
+                    document.body.classList.remove("break-mode");
+                    eyeDiv.className = '';
+                    pupil.style.left = '20px';
+                    pupil.style.top = '20px';
+                    startWorkTimer();
+                }
+            }, 1000);
+        }
+
+        function startApp() {
+            if (!running) { running = true; startWorkTimer(); }
+        }
+
+        function stopApp() {
+            running = false;
+            clearTimeout(workTimer);
+            clearInterval(countdownTimer);
+            clearInterval(workCountdownTimer);
+            document.getElementById('exercise').textContent = "Timer stopped.";
+            document.getElementById("countdown").textContent = "";
+            document.getElementById("workCountdownText").textContent = "--:--";
+            document.querySelector(".progress-bar").style.strokeDashoffset = circumference;
+            document.body.classList.remove("break-mode");
+            const eyeDiv = document.getElementById('eyeAnimation');
+            eyeDiv.className = '';
+            eyeDiv.querySelector('.pupil').style.left = '20px';
+            eyeDiv.querySelector('.pupil').style.top = '20px';
+        }
+
+        document.getElementById('startBtn').addEventListener('click', startApp);
+        document.getElementById('stopBtn').addEventListener('click', stopApp);
+    </script>
 </body>
 </html>
