@@ -39,4 +39,4 @@ A simple browser-based app that reminds you to take breaks from your screen and 
 1. Fork the repository.
 2. Clone your fork:  
    ```bash
-   git clone https://github.com/YOUR_USERNAME/eye-exercise-reminder.git
+     https://github.com/TejeswarRaju/eye-exercise-app.git
